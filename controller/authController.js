@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
+const { validateBeforeSave } = require("mongoose");
 const { stringify } = require("querystring");
 const { promisify } = require("util");
 const { findById } = require("../model/userModel");
@@ -111,10 +112,16 @@ exports.updatePassword = catchAsync(async (req, res, next) => {
 exports.forgotPassword = catchAsync(async (req, res, next) => {
   // find user based on the inputed email
   const user = await User.findOne({ email: req.body.email });
-  if (!user || !req.body.emailx) {
+  if (!user || !req.body.email) {
     return next(new AppError("User not found, please try again", 404));
   }
   const resetToken = crypto.randomBytes(32).toString("hex");
+
+  const resetTokenHashed = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
+
   const resetPasswordExpires = Date.now() + 600000;
 
   // user.resetPasswordToken = crypto
@@ -124,13 +131,11 @@ exports.forgotPassword = catchAsync(async (req, res, next) => {
 
   await User.findOneAndUpdate(
     { email: req.body.email },
-    { resetPasswordToken: resetToken, resetPasswordExpires }
+    { resetPasswordToken: resetTokenHashed, resetPasswordExpires }
   );
 
   // //create the reset token and save on the doc
   // await user.save({ validateBeforeSave: false });
-
-  // console.log("ll");
 
   await Email("Rest Token", resetToken);
   try {
@@ -148,6 +153,7 @@ exports.forgotPassword = catchAsync(async (req, res, next) => {
 
 exports.resetPassword = catchAsync(async (req, res, next) => {
   const token = req.params.token;
+
   const resetToken = await crypto
     .createHash("sha256")
     .update(token)
@@ -155,18 +161,31 @@ exports.resetPassword = catchAsync(async (req, res, next) => {
 
   const user = await User.findOne({
     resetPasswordToken: resetToken,
-    resetPasswordToken: { $gt: Date.now() },
-  });
+    resetPasswordExpires: { $gt: Date.now() },
+  }).select("+password");
 
   if (!user) {
     return next(new AppError("Token is Invalid or Expired", 400));
   }
 
+  if (await user.comparePassword(req.body.password, user.password)) {
+    return next(
+      new AppError(
+        `New password can't be the same with the current password`,
+        400
+      )
+    );
+  }
+
+  console.log("Passowrd passed");
+
   user.password = req.body.password;
-  user.confirmPassword = user.body.confirmPassword;
+  user.confirmPassword = req.body.confirmPassword;
 
   await user.save();
 
+  user.resetPasswordToken = undefined;
+  user.resetPasswordExpires;
   try {
     res.status(200).json({
       status: "success",

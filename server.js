@@ -4,7 +4,7 @@ const dotenv = require("dotenv");
 dotenv.config();
 process.on("uncaughtException", (err) => {
   console.log("unhadled rejection. shutting down....");
-  console.log(err.name, err.message);
+  console.log(err.name, err.message, err.stack);
   process.exit(1);
 });
 
@@ -26,16 +26,16 @@ const database = (module.exports = () => {
 database();
 
 const app = require("./index");
-const port = 6000;
+const port = process.env.PORT || 6000;
 
 app.listen(port, () => {
   console.log(`server running on port ${port}`);
 });
 
 process.on("unhandledRejection", (err) => {
-  console.log(err.name, err.message);
+  console.log(err.name, err.message, err.stack);
   console.log("unhadled rejection. shutting down....");
-  server.close(() => {
-    process.exit(1);
-  });
+  // server.close(() => {
+  //   process.exit(1);
+  // });
 });

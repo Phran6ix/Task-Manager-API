@@ -23,6 +23,8 @@ exports.createTask = catchAsync(async (req, res, next) => {
 
   const sendEmailOnTimer = async () => {
     await email("A task Reminder", req.body.description);
+    req.user.completedAt = true;
+    await req.user.save();
   };
 
   const time = parsedDate - Date.now();
